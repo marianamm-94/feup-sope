@@ -68,11 +68,11 @@ inf->sub=0;
 inf->replace=0;
 inf->number=0;
 
-if(strcmp(option,"-V")==0)
+if(strcmp(option,"-V")==0 || strcmp(option,"-v")==0)
 	inf->optionV=1;
-if(strcmp(option,"-C")==0)
+if(strcmp(option,"-C")==0 || strcmp(option,"-c")==0)
 	inf->optionC=1;
-if(strcmp(option,"-R")==0)
+if(strcmp(option,"-R")==0 || strcmp(option,"-r")==0)
 	inf->optionR=1;
 	
 if(mode[0]=='0')
@@ -110,7 +110,7 @@ int n=0;
 	else if(mode[1]=='-')
 	{
 		inf->sub=1;
-		inf->number =  convertOctalToDecimal(777-inf->octal); //fazer operador & com este número e o octal lido em decimal e passar o resultado para octal;
+		inf->number =  convertOctalToDecimal(777-inf->octal); //fazer operador & com este número e o octal lido em decimal e passar o resultado para octal;   
 	}
 
 }
@@ -123,8 +123,83 @@ int n=0;
 void func(int ai){
 printf("INFO ABOUT PROCESSES");
 }
+int process_permission(struct stat st){
+	int perm = 0;
 
-int search_dir_recursive(char *path)
+	if (st.st_mode & S_IRUSR) perm += 400; //r
+	if (st.st_mode & S_IWUSR) perm += 200; //w
+	if (st.st_mode & S_IXUSR) perm += 100; //x
+	if (st.st_mode & S_IRGRP) perm += 40;  //r
+	if (st.st_mode & S_IWGRP) perm += 20;  //w
+	if (st.st_mode & S_IXGRP) perm += 10;  //x
+	if (st.st_mode & S_IROTH) perm += 4;   //r
+	if (st.st_mode & S_IWOTH) perm += 2;   //w
+	if (st.st_mode & S_IXOTH) perm += 1;   //x
+	
+	return perm;
+}
+void changePermission(struct stat path_stat, struct info* inf, char *path_string){
+int oldPer=process_permission(path_stat), newPer;
+			if(inf->replace){
+				//ler para comparar
+				chmod(path_string,inf->octal);
+			}else if(inf->add){
+				newPer=convertOctalToDecimal(oldPer) | inf->number;
+				newPer=convertDecimalToOctal(newPer);
+				chmod(path_string,newPer);
+			}else if(inf->sub){
+				newPer=convertOctalToDecimal(oldPer) & inf->number;
+				newPer=convertDecimalToOctal(newPer);
+				chmod(path_string,newPer);
+			}
+}
+int search_dir_recursive(char *path, struct info* inf)
+{
+
+
+	DIR *directory = opendir(path);
+	struct dirent *file_name;
+
+	while ((file_name = readdir(directory)) != NULL)
+	{
+		struct stat path_stat;
+		char *path_string = malloc(sizeof(path) + sizeof('/') + sizeof(file_name->d_name));
+		sprintf(path_string, "%s/%s", path, file_name->d_name);
+		stat(path_string, &path_stat);
+		if (S_ISREG(path_stat.st_mode))//faz de conta que está bem
+		{	
+			changePermission(path_stat,inf,path_string);
+			//mudar permissão de ficheiro aqui
+		}
+		else if (S_ISDIR(path_stat.st_mode) && strcmp(file_name->d_name, "..") && strcmp(file_name->d_name, "."))
+		{
+			changePermission(path_stat,inf,path_string);
+			//mudar permissão de diretório aqui
+			
+			int id = fork();
+			if (id == 0)
+			{      
+				search_dir_recursive(path_string, inf);
+				return 0;
+			}
+			else
+			{
+				globalPID=id;
+				wait(NULL);
+				
+					
+			}
+		}
+		free(path_string);
+	}
+	
+	//escrever num ficheiro à parte informações sobre este processo-filho que está prestes a terminar
+	
+	return 0;
+}
+
+
+int search_dir(char *path, int showAll, struct info* inf)
 {
 
 
@@ -146,19 +221,6 @@ int search_dir_recursive(char *path)
 		
 			//mudar permissão de diretório aqui
 			
-			int id = fork(), wpid;
-			if (id == 0)
-			{      
-				search_dir_recursive(path_string);
-				return 0;
-			}
-			else
-			{
-				globalPID=id;
-				wpid=wait(NULL);
-				
-					
-			}
 		}
 		free(path_string);
 	}
@@ -167,6 +229,7 @@ int search_dir_recursive(char *path)
 	
 	return 0;
 }
+
 
 int main(int argc, char *argv[]){
 int done = 0;
@@ -185,8 +248,14 @@ new.sa_flags=0;
 if(sigaction(SIGINT, &new, &old)==-1)
 perror("sigaction");
 
+if(inputInfo.optionV){
+search_dir(argv[3],1,&inputInfo);
+}else if(inputInfo.optionC){
+search_dir(argv[3],0,&inputInfo);
+}else if(inputInfo.optionR){
+search_dir_recursive(argv[3],&inputInfo);
+}
 
-search_dir_recursive(argv[3]); // o diretório não é aqui no input mas é para testar a opção -R
 
 //matar todos os processos exceto um
 while(!done)
