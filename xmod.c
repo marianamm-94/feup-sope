@@ -11,6 +11,8 @@
 #include <signal.h>
 #include <math.h>
 
+int parent;
+char* dir;
 
 int convertDecimalToOctal(int decimalNumber)
 {
@@ -75,8 +77,11 @@ if(strcmp(option,"-C")==0 || strcmp(option,"-c")==0)
 if(strcmp(option,"-R")==0 || strcmp(option,"-r")==0)
 	inf->optionR=1;
 	
-if(mode[0]=='0')
-	inf->octal = atoi(mode);
+if(mode[0]=='0'){
+	inf->octal = strtol(mode,0,8);
+	inf->replace=1;
+}
+	
 else{
 int i=0;
 int r=0;
@@ -118,31 +123,33 @@ int n=0;
 }
 
 
-
-//func só resulta se o ^C for enviado depois de procurar recursivamente
 void func(int ai){
-printf("INFO ABOUT PROCESSES");
+
+//if(getpid()==parent)
+	printf("ID: %d ; Diretório: %s\n",getpid(),dir);
+	exit(0);
 }
+
 int process_permission(struct stat st){
 	int perm = 0;
 
-	if (st.st_mode & S_IRUSR) perm += 400; //r
-	if (st.st_mode & S_IWUSR) perm += 200; //w
-	if (st.st_mode & S_IXUSR) perm += 100; //x
-	if (st.st_mode & S_IRGRP) perm += 40;  //r
-	if (st.st_mode & S_IWGRP) perm += 20;  //w
-	if (st.st_mode & S_IXGRP) perm += 10;  //x
+	if (st.st_mode & S_IRUSR) perm += 4*64; //r
+	if (st.st_mode & S_IWUSR) perm += 2*64; //w
+	if (st.st_mode & S_IXUSR) perm += 1*64; //x
+	if (st.st_mode & S_IRGRP) perm += 4*8;  //r
+	if (st.st_mode & S_IWGRP) perm += 2*8;  //w
+	if (st.st_mode & S_IXGRP) perm += 1*8;  //x
 	if (st.st_mode & S_IROTH) perm += 4;   //r
 	if (st.st_mode & S_IWOTH) perm += 2;   //w
 	if (st.st_mode & S_IXOTH) perm += 1;   //x
 	
 	return perm;
 }
-void changePermission(struct stat path_stat, struct info* inf, char *path_string){
+int changePermission(struct stat path_stat, struct info* inf, char *path_string){
 int oldPer=process_permission(path_stat), newPer;
 			if(inf->replace){
-				//ler para comparar
-				chmod(path_string,inf->octal);
+				newPer=inf->octal;
+				chmod(path_string,newPer);
 			}else if(inf->add){
 				newPer=convertOctalToDecimal(oldPer) | inf->number;
 				newPer=convertDecimalToOctal(newPer);
@@ -152,11 +159,16 @@ int oldPer=process_permission(path_stat), newPer;
 				newPer=convertDecimalToOctal(newPer);
 				chmod(path_string,newPer);
 			}
+			printf("old: %o\n new: %o\n",oldPer,newPer);
+			if(newPer==oldPer)
+				return 1;
+	return 0;
 }
 int search_dir_recursive(char *path, struct info* inf)
 {
-
-
+	
+	dir=path;
+	printf("PATH: %s\n",dir);
 	DIR *directory = opendir(path);
 	struct dirent *file_name;
 
@@ -164,6 +176,7 @@ int search_dir_recursive(char *path, struct info* inf)
 	{
 		struct stat path_stat;
 		char *path_string = malloc(sizeof(path) + sizeof('/') + sizeof(file_name->d_name));
+		
 		sprintf(path_string, "%s/%s", path, file_name->d_name);
 		stat(path_string, &path_stat);
 		if (S_ISREG(path_stat.st_mode))//faz de conta que está bem
@@ -178,13 +191,12 @@ int search_dir_recursive(char *path, struct info* inf)
 			
 			int id = fork();
 			if (id == 0)
-			{      
+			{      sleep(6);
 				search_dir_recursive(path_string, inf);
 				return 0;
 			}
 			else
 			{
-				globalPID=id;
 				wait(NULL);
 				
 					
@@ -201,30 +213,25 @@ int search_dir_recursive(char *path, struct info* inf)
 
 int search_dir(char *path, int showAll, struct info* inf)
 {
-
-
-	DIR *directory = opendir(path);
-	struct dirent *file_name;
-
-	while ((file_name = readdir(directory)) != NULL)
-	{
 		struct stat path_stat;
-		char *path_string = malloc(sizeof(path) + sizeof('/') + sizeof(file_name->d_name));
-		sprintf(path_string, "%s/%s", path, file_name->d_name);
-		stat(path_string, &path_stat);
+		stat(path, &path_stat);
 		if (S_ISREG(path_stat.st_mode))
 		{
-			//mudar permissão de ficheiro aqui
+			if(!changePermission(path_stat,inf,path) && !showAll)
+				printf("Modo C!\n");
+			else if( showAll)
+				printf("Modo V!\n");
+				//mostrar ficheiros
 		}
-		else if (S_ISDIR(path_stat.st_mode) && strcmp(file_name->d_name, "..") && strcmp(file_name->d_name, "."))
+		else if (S_ISDIR(path_stat.st_mode))
 		{
-		
-			//mudar permissão de diretório aqui
+			if(!changePermission(path_stat,inf,path) && !showAll)
+				printf("Modo C!\n");
+			else if( showAll)
+				printf("Modo V!\n");
+				//mostrar ficheiros
 			
 		}
-		free(path_string);
-	}
-	
 	//escrever num ficheiro à parte informações sobre este processo-filho que está prestes a terminar
 	
 	return 0;
@@ -232,9 +239,9 @@ int search_dir(char *path, int showAll, struct info* inf)
 
 
 int main(int argc, char *argv[]){
-int done = 0;
-globalPID=-1;
 
+
+parent=getpid();
 struct info inputInfo;
 processInput(&inputInfo, argv[1], argv[2],argv[3]);
 
@@ -258,14 +265,8 @@ search_dir_recursive(argv[3],&inputInfo);
 
 
 //matar todos os processos exceto um
-while(!done)
-{
-	if(globalPID!=-1)
-		exit(0);
-	done = 1;
-}
-
-printf("%d", inputInfo.number&0x1D1);
+if(getpid()!=parent)
+	exit(0);
 
 return 0;
 }
