@@ -11,6 +11,7 @@
 #include <signal.h>
 #include <math.h>
 #include "signals.h"
+#include "logging.h"
 
 int parent;
 char* dir;
@@ -169,9 +170,10 @@ int changePermission(struct stat path_stat, struct info* inf, char *path_string)
 }
 int search_dir_recursive(char *path, struct info* inf)
 {
-	if (getpgid(0) == getpid()) setParent();
+
 	dir=path;
 	printf("PATH: %s\n",dir);
+	if (getpgid(0) == getpid()) setParent();
 	DIR *directory = opendir(path);
 	struct dirent *file_name;
 
@@ -210,7 +212,8 @@ int search_dir_recursive(char *path, struct info* inf)
 			
 			int id = fork();
 			if (id == 0)
-			{      
+			{     
+				logging(); 
 				sleep(2);
 				if (getpgid(0) != getpid()) setChild();
 				search_dir_recursive(path_string, inf);
@@ -219,8 +222,7 @@ int search_dir_recursive(char *path, struct info* inf)
 			else
 			{
 				//wait(NULL);
-				
-					
+						
 			}
 		
 		}
@@ -229,7 +231,6 @@ int search_dir_recursive(char *path, struct info* inf)
 	
 	//escrever num ficheiro à parte informações sobre este processo-filho que está prestes a terminar
 	closedir(directory);
-	printf("waiting fpr chiiiiii \n");
 	if (getpgid(0) != getpid()){
 		
 		
@@ -275,9 +276,8 @@ int main(int argc, char *argv[]){
 
 
 	parent=getpid();
-	//setParent();
-	printf("waitin \n");
 	struct info inputInfo;
+	logging();
 	processInput(&inputInfo, argv[1], argv[2],argv[3]);
 
 	struct sigaction new, old;
