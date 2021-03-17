@@ -10,60 +10,12 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <math.h>
+#include "signals.h"
 
-int parent, nftot, nfmod;
+int parent;
 char* dir;
 
-void printInformation(int oldOctal, int newOctal, char* dir)
-{
-char old[12]="(---------)";
-char new[12]="(---------)";
-if(oldOctal&0x100)
-old[1]='r';
-if(oldOctal&0x80)
-old[2]='w';
-if(oldOctal&0x40)
-old[3]='x';
-if(oldOctal&0x20)
-old[4]='r';
-if(oldOctal&0x10)
-old[5]='w';
-if(oldOctal&0x8)
-old[6]='x';
-if(oldOctal&0x4)
-old[7]='r';
-if(oldOctal&0x2)
-old[8]='w';
-if(oldOctal&0x1)
-old[9]='x';
-
-if(newOctal&0x100)
-new[1]='r';
-if(newOctal&0x80)
-new[2]='w';
-if(newOctal&0x40)
-new[3]='x';
-if(newOctal&0x20)
-new[4]='r';
-if(newOctal&0x10)
-new[5]='w';
-if(newOctal&0x8)
-new[6]='x';
-if(newOctal&0x4)
-new[7]='r';
-if(newOctal&0x2)
-new[8]='w';
-if(newOctal&0x1)
-new[9]='x';
-
-printf("mode of '%s' changed from %o %s to %o %s\n",dir,oldOctal, old, newOctal, new);
-
-
-
-
-
-
-}
+extern volatile sig_atomic_t hold;
 
 int convertDecimalToOctal(int decimalNumber)
 {
@@ -161,12 +113,12 @@ int n=0;
 	else if(mode[1]=='+')
 	{
 		inf->add=1;
-		inf->number=convertOctalToDecimal(inf->octal); 
+		inf->number=convertOctalToDecimal(inf->octal); //fazer operador | com este número e o octal lido em decimal e passar o resultado para octal;
 	}
 	else if(mode[1]=='-')
 	{
 		inf->sub=1;
-		inf->number =  convertOctalToDecimal(777-inf->octal);    
+		inf->number =  convertOctalToDecimal(777-inf->octal); //fazer operador & com este número e o octal lido em decimal e passar o resultado para octal;   
 	}
 
 }
@@ -175,30 +127,11 @@ int n=0;
 
 
 void func(int ai){
-char  c;
 
-printf("%d ; %s ; %d ; %d\n",getpid(),dir, nftot, nfmod);
-
-if(getpid()==parent){
-	printf("\n > Are you sure you want to terminate (Y/N)? ");
-	c = getchar();
-
-	if (c == 'y' || c == 'Y')
-		exit(0);
-	else if (c == 'n' || c == 'N')
-		return;
-	else {
-		printf(" >> ERROR: Character not allowed!");
-		func(SIGINT);
-	}
-		
-exit(0);
+//if(getpid()==parent)
+	printf("ID: %d ; Diretório: %s\n",getpid(),dir);
+	exit(0);
 }
-	
-
-}
-
-
 
 int process_permission(struct stat st){
 	int perm = 0;
@@ -215,8 +148,8 @@ int process_permission(struct stat st){
 	
 	return perm;
 }
-int changePermission(struct stat path_stat, struct info* inf, char *path_string, int*old, int*new){
-int oldPer=process_permission(path_stat), newPer;
+int changePermission(struct stat path_stat, struct info* inf, char *path_string){
+	int oldPer=process_permission(path_stat), newPer;
 			if(inf->replace){
 				newPer=inf->octal;
 				chmod(path_string,newPer);
@@ -229,87 +162,106 @@ int oldPer=process_permission(path_stat), newPer;
 				newPer=convertDecimalToOctal(newPer);
 				chmod(path_string,newPer);
 			}
-			*old=oldPer;
-			*new=newPer;
+			printf("old: %o\n new: %o\n",oldPer,newPer);
 			if(newPer==oldPer)
 				return 1;
 	return 0;
 }
 int search_dir_recursive(char *path, struct info* inf)
 {
-	int old, new;
+	if (getpgid(0) == getpid()) setParent();
 	dir=path;
-
+	printf("PATH: %s\n",dir);
 	DIR *directory = opendir(path);
 	struct dirent *file_name;
 
 	while ((file_name = readdir(directory)) != NULL)
-	{	
+	{
+		if (checkcurrentstat())
+		{
+			fprintf(stderr, "ERROR");
+		}
+		sleep(1);
+		if (hold)
+		{
+			pause();
+		}
+		
+		
 		struct stat path_stat;
 		char *path_string = malloc(sizeof(path) + sizeof('/') + sizeof(file_name->d_name));
+
+		if (checkcurrentstat())
+		{
+			fprintf(stderr, "ERROR");
+		}
 		
 		sprintf(path_string, "%s/%s", path, file_name->d_name);
 		stat(path_string, &path_stat);
 		if (S_ISREG(path_stat.st_mode))//faz de conta que está bem
 		{	
-			nftot++;
-			if(!changePermission(path_stat,inf,path_string,&old,&new))
-				nfmod++;
+			changePermission(path_stat,inf,path_string);
+			//mudar permissão de ficheiro aqui
 		}
 		else if (S_ISDIR(path_stat.st_mode) && strcmp(file_name->d_name, "..") && strcmp(file_name->d_name, "."))
 		{
-			changePermission(path_stat,inf,path_string,&old, &new);
+			changePermission(path_stat,inf,path_string);
+			//mudar permissão de diretório aqui
 			
-			nfmod=0;
-			nftot=0;
 			int id = fork();
 			if (id == 0)
 			{      
+				sleep(2);
+				if (getpgid(0) != getpid()) setChild();
 				search_dir_recursive(path_string, inf);
 				return 0;
 			}
 			else
 			{
-				wait(NULL);
+				//wait(NULL);
 				
 					
 			}
+		
 		}
 		free(path_string);
 	}
 	
 	//escrever num ficheiro à parte informações sobre este processo-filho que está prestes a terminar
-	
+	closedir(directory);
+	printf("waiting fpr chiiiiii \n");
+	if (getpgid(0) != getpid()){
+		
+		
+	}
+	while (waitpid(-1, NULL, WNOHANG) >= 0)
+		{
+			checkcurrentstat();
+		}
+
+    
 	return 0;
 }
 
 
 int search_dir(char *path, int showAll, struct info* inf)
 {
-		int old, new;
 		struct stat path_stat;
 		stat(path, &path_stat);
 		if (S_ISREG(path_stat.st_mode))
-		{	
-			if(changePermission(path_stat,inf,path, &old, &new)){
-				if(showAll)
-					printInformation(old,new, path);
-			}	
-			else {
-				printInformation(old,new, path);
-				nfmod++;
-			}
-				
-				
-			nftot++;
-			
+		{
+			if(!changePermission(path_stat,inf,path) && !showAll)
+				printf("Modo C!\n");
+			else if( showAll)
+				printf("Modo V!\n");
+				//mostrar ficheiros
 		}
 		else if (S_ISDIR(path_stat.st_mode))
 		{
-			if(!changePermission(path_stat,inf,path,&old,&new) && !showAll)
-				printInformation(old,new, path);
+			if(!changePermission(path_stat,inf,path) && !showAll)
+				printf("Modo C!\n");
 			else if( showAll)
-				printInformation(old,new, path);
+				printf("Modo V!\n");
 				//mostrar ficheiros
 			
 		}
@@ -321,31 +273,33 @@ int search_dir(char *path, int showAll, struct info* inf)
 
 int main(int argc, char *argv[]){
 
-dir=argv[3];
-parent=getpid();
-struct info inputInfo;
-processInput(&inputInfo, argv[1], argv[2],argv[3]);
 
-struct sigaction new, old;
-sigset_t smask;
-if(sigemptyset(&smask)==-1)
- perror("sigsetfunctions");
-new.sa_handler=func;
-new.sa_mask=smask;
-new.sa_flags=0;
-if(sigaction(SIGINT, &new, &old)==-1)
-perror("sigaction");
+	parent=getpid();
+	//setParent();
+	printf("waitin \n");
+	struct info inputInfo;
+	processInput(&inputInfo, argv[1], argv[2],argv[3]);
 
-if(inputInfo.optionV){
-search_dir(argv[3],1,&inputInfo);
-}else if(inputInfo.optionC){
-search_dir(argv[3],0,&inputInfo);
-}else if(inputInfo.optionR){
-search_dir_recursive(argv[3],&inputInfo);
-}
+	struct sigaction new, old;
+	sigset_t smask;
+	if(sigemptyset(&smask)==-1) perror("sigsetfunctions");
+	new.sa_handler=func;
+	new.sa_mask=smask;
+	new.sa_flags=0;
+	if(sigaction(SIGINT, &new, &old)==-1) perror("sigaction");
+
+	if(inputInfo.optionV){
+	search_dir(argv[3],1,&inputInfo);
+	}else if(inputInfo.optionC){
+	search_dir(argv[3],0,&inputInfo);
+	}else if(inputInfo.optionR){
+	search_dir_recursive(argv[3],&inputInfo);
+	}
 
 
-printf("ending.....\n");
+	//matar todos os processos exceto um
+	if(getpid()!=parent)
+		exit(0);
 
-return 0;
+	return 0;
 }
