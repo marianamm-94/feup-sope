@@ -14,6 +14,57 @@
 int parent;
 char* dir;
 
+void printInformation(int oldOctal, int newOctal, char* dir)
+{
+char old[12]="(---------)";
+char new[12]="(---------)";
+if(oldOctal&0x100)
+old[1]='r';
+if(oldOctal&0x80)
+old[2]='w';
+if(oldOctal&0x40)
+old[3]='x';
+if(oldOctal&0x20)
+old[4]='r';
+if(oldOctal&0x10)
+old[5]='w';
+if(oldOctal&0x8)
+old[6]='x';
+if(oldOctal&0x4)
+old[7]='r';
+if(oldOctal&0x2)
+old[8]='w';
+if(oldOctal&0x1)
+old[9]='x';
+
+if(newOctal&0x100)
+new[1]='r';
+if(newOctal&0x80)
+new[2]='w';
+if(newOctal&0x40)
+new[3]='x';
+if(newOctal&0x20)
+new[4]='r';
+if(newOctal&0x10)
+new[5]='w';
+if(newOctal&0x8)
+new[6]='x';
+if(newOctal&0x4)
+new[7]='r';
+if(newOctal&0x2)
+new[8]='w';
+if(newOctal&0x1)
+new[9]='x';
+
+printf("mode of '%s' changed from %o %s to %o %s\n",dir,oldOctal, old, newOctal, new);
+
+
+
+
+
+
+}
+
 int convertDecimalToOctal(int decimalNumber)
 {
     int octalNumber = 0, i = 1;
@@ -145,7 +196,7 @@ int process_permission(struct stat st){
 	
 	return perm;
 }
-int changePermission(struct stat path_stat, struct info* inf, char *path_string){
+int changePermission(struct stat path_stat, struct info* inf, char *path_string, int*old, int*new){
 int oldPer=process_permission(path_stat), newPer;
 			if(inf->replace){
 				newPer=inf->octal;
@@ -159,6 +210,8 @@ int oldPer=process_permission(path_stat), newPer;
 				newPer=convertDecimalToOctal(newPer);
 				chmod(path_string,newPer);
 			}
+			*old=oldPer;
+			*new=newPer;
 			printf("old: %o\n new: %o\n",oldPer,newPer);
 			if(newPer==oldPer)
 				return 1;
@@ -166,14 +219,14 @@ int oldPer=process_permission(path_stat), newPer;
 }
 int search_dir_recursive(char *path, struct info* inf)
 {
-	
+	int old, new;
 	dir=path;
 	printf("PATH: %s\n",dir);
 	DIR *directory = opendir(path);
 	struct dirent *file_name;
 
 	while ((file_name = readdir(directory)) != NULL)
-	{
+	{	
 		struct stat path_stat;
 		char *path_string = malloc(sizeof(path) + sizeof('/') + sizeof(file_name->d_name));
 		
@@ -181,12 +234,12 @@ int search_dir_recursive(char *path, struct info* inf)
 		stat(path_string, &path_stat);
 		if (S_ISREG(path_stat.st_mode))//faz de conta que está bem
 		{	
-			changePermission(path_stat,inf,path_string);
+			changePermission(path_stat,inf,path_string,&old, &new);
 			//mudar permissão de ficheiro aqui
 		}
 		else if (S_ISDIR(path_stat.st_mode) && strcmp(file_name->d_name, "..") && strcmp(file_name->d_name, "."))
 		{
-			changePermission(path_stat,inf,path_string);
+			changePermission(path_stat,inf,path_string,&old, &new);
 			//mudar permissão de diretório aqui
 			
 			int id = fork();
@@ -213,19 +266,20 @@ int search_dir_recursive(char *path, struct info* inf)
 
 int search_dir(char *path, int showAll, struct info* inf)
 {
+		int old, new;
 		struct stat path_stat;
 		stat(path, &path_stat);
 		if (S_ISREG(path_stat.st_mode))
-		{
-			if(!changePermission(path_stat,inf,path) && !showAll)
+		{	
+			if(!changePermission(path_stat,inf,path, &old, &new) && !showAll)
 				printf("Modo C!\n");
 			else if( showAll)
-				printf("Modo V!\n");
+				printInformation(old,new, path);
 				//mostrar ficheiros
 		}
 		else if (S_ISDIR(path_stat.st_mode))
 		{
-			if(!changePermission(path_stat,inf,path) && !showAll)
+			if(!changePermission(path_stat,inf,path,&old,&new) && !showAll)
 				printf("Modo C!\n");
 			else if( showAll)
 				printf("Modo V!\n");
