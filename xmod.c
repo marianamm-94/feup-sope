@@ -11,7 +11,7 @@
 #include <signal.h>
 #include <math.h>
 
-int parent;
+int parent, nftot, nfmod;
 char* dir;
 
 void printInformation(int oldOctal, int newOctal, char* dir)
@@ -161,12 +161,12 @@ int n=0;
 	else if(mode[1]=='+')
 	{
 		inf->add=1;
-		inf->number=convertOctalToDecimal(inf->octal); //fazer operador | com este número e o octal lido em decimal e passar o resultado para octal;
+		inf->number=convertOctalToDecimal(inf->octal); 
 	}
 	else if(mode[1]=='-')
 	{
 		inf->sub=1;
-		inf->number =  convertOctalToDecimal(777-inf->octal); //fazer operador & com este número e o octal lido em decimal e passar o resultado para octal;   
+		inf->number =  convertOctalToDecimal(777-inf->octal);    
 	}
 
 }
@@ -175,11 +175,30 @@ int n=0;
 
 
 void func(int ai){
+char  c;
 
-//if(getpid()==parent)
-	printf("ID: %d ; Diretório: %s\n",getpid(),dir);
-	exit(0);
+printf("%d ; %s ; %d ; %d\n",getpid(),dir, nftot, nfmod);
+
+if(getpid()==parent){
+	printf("\n > Are you sure you want to terminate (Y/N)? ");
+	c = getchar();
+
+	if (c == 'y' || c == 'Y')
+		exit(0);
+	else if (c == 'n' || c == 'N')
+		return;
+	else {
+		printf(" >> ERROR: Character not allowed!");
+		func(SIGINT);
+	}
+		
+exit(0);
 }
+	
+
+}
+
+
 
 int process_permission(struct stat st){
 	int perm = 0;
@@ -212,7 +231,6 @@ int oldPer=process_permission(path_stat), newPer;
 			}
 			*old=oldPer;
 			*new=newPer;
-			printf("old: %o\n new: %o\n",oldPer,newPer);
 			if(newPer==oldPer)
 				return 1;
 	return 0;
@@ -221,7 +239,7 @@ int search_dir_recursive(char *path, struct info* inf)
 {
 	int old, new;
 	dir=path;
-	printf("PATH: %s\n",dir);
+
 	DIR *directory = opendir(path);
 	struct dirent *file_name;
 
@@ -234,17 +252,19 @@ int search_dir_recursive(char *path, struct info* inf)
 		stat(path_string, &path_stat);
 		if (S_ISREG(path_stat.st_mode))//faz de conta que está bem
 		{	
-			changePermission(path_stat,inf,path_string,&old, &new);
-			//mudar permissão de ficheiro aqui
+			nftot++;
+			if(!changePermission(path_stat,inf,path_string,&old,&new))
+				nfmod++;
 		}
 		else if (S_ISDIR(path_stat.st_mode) && strcmp(file_name->d_name, "..") && strcmp(file_name->d_name, "."))
 		{
 			changePermission(path_stat,inf,path_string,&old, &new);
-			//mudar permissão de diretório aqui
 			
+			nfmod=0;
+			nftot=0;
 			int id = fork();
 			if (id == 0)
-			{      sleep(6);
+			{      
 				search_dir_recursive(path_string, inf);
 				return 0;
 			}
@@ -271,18 +291,25 @@ int search_dir(char *path, int showAll, struct info* inf)
 		stat(path, &path_stat);
 		if (S_ISREG(path_stat.st_mode))
 		{	
-			if(!changePermission(path_stat,inf,path, &old, &new) && !showAll)
-				printf("Modo C!\n");
-			else if( showAll)
+			if(changePermission(path_stat,inf,path, &old, &new)){
+				if(showAll)
+					printInformation(old,new, path);
+			}	
+			else {
 				printInformation(old,new, path);
-				//mostrar ficheiros
+				nfmod++;
+			}
+				
+				
+			nftot++;
+			
 		}
 		else if (S_ISDIR(path_stat.st_mode))
 		{
 			if(!changePermission(path_stat,inf,path,&old,&new) && !showAll)
-				printf("Modo C!\n");
+				printInformation(old,new, path);
 			else if( showAll)
-				printf("Modo V!\n");
+				printInformation(old,new, path);
 				//mostrar ficheiros
 			
 		}
@@ -294,7 +321,7 @@ int search_dir(char *path, int showAll, struct info* inf)
 
 int main(int argc, char *argv[]){
 
-
+dir=argv[3];
 parent=getpid();
 struct info inputInfo;
 processInput(&inputInfo, argv[1], argv[2],argv[3]);
@@ -318,9 +345,7 @@ search_dir_recursive(argv[3],&inputInfo);
 }
 
 
-//matar todos os processos exceto um
-if(getpid()!=parent)
-	exit(0);
+printf("ending.....\n");
 
 return 0;
 }
