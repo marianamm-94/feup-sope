@@ -17,7 +17,7 @@ char* dir;
 char* arg1;
 char* arg2;
 
-void printInformation(int oldOctal, int newOctal, char* dir)
+void printInformation(int oldOctal, int newOctal, char* dir,int retained)
 {
 char old[12]="(---------)";
 char new[12]="(---------)";
@@ -58,40 +58,13 @@ if(newOctal&0x2)
 new[8]='w';
 if(newOctal&0x1)
 new[9]='x';
-
+if(retained)
+	printf("mode of '%s' retained as %o %s\n",dir,oldOctal, old);
+else
 printf("mode of '%s' changed from %o %s to %o %s\n",dir,oldOctal, old, newOctal, new);
 }
 
-int convertDecimalToOctal(int decimalNumber)
-{
-    int octalNumber = 0, i = 1;
 
-    while (decimalNumber != 0)
-    {
-        octalNumber += (decimalNumber % 8) * i;
-        decimalNumber /= 8;
-        i *= 10;
-    }
-
-    return octalNumber;
-}
-
-long long convertOctalToDecimal(int octalNumber)
-{
-    int decimalNumber = 0, i = 0;
-
-    while(octalNumber != 0)
-    {
-        decimalNumber += (octalNumber%10) * pow(8,i);
-        ++i;
-        octalNumber/=10;
-    }
-
-    i = 1;
-
-    return decimalNumber;
-}
- 
 struct info
 {
 int octal;
@@ -123,7 +96,7 @@ if(strcmp(option,"-C")==0 || strcmp(option,"-c")==0)
 if(strcmp(option,"-R")==0 || strcmp(option,"-r")==0)
 	inf->optionR=1;
 	
-if(mode[0]=='0'){
+if(mode[0]!='u' && mode[0]!='g' && mode[0]!='o' && mode[0]!='a'){
 	inf->octal = strtol(mode,0,8);
 	inf->replace=1;
 }
@@ -145,9 +118,9 @@ int n=0;
 		i++;
 	}
 	if(mode[0]=='u' || mode[0]=='a')
-		n+=100*(4*r+2*w+x);
+		n+=64*(4*r+2*w+x);
 	if(mode[0]=='g' || mode[0]=='a')
-		n+=10*(4*r+2*w+x);
+		n+=8*(4*r+2*w+x);
 	if(mode[0]=='o' || mode[0]=='a')
 		n+=4*r+2*w+x;
 	inf->octal=n;
@@ -156,12 +129,12 @@ int n=0;
 	else if(mode[1]=='+')
 	{
 		inf->add=1;
-		inf->number=convertOctalToDecimal(inf->octal); 
+		inf->number=inf->octal; 
 	}
 	else if(mode[1]=='-')
 	{
 		inf->sub=1;
-		inf->number =  convertOctalToDecimal(777-inf->octal);    
+		inf->number =  511-inf->octal;    
 	}
 
 }
@@ -216,12 +189,12 @@ int oldPer=process_permission(path_stat), newPer;
 				newPer=inf->octal;
 				chmod(path_string,newPer);
 			}else if(inf->add){
-				newPer=convertOctalToDecimal(oldPer) | inf->number;
-				newPer=convertDecimalToOctal(newPer);
+				newPer=oldPer | inf->number;
+				newPer=newPer;
 				chmod(path_string,newPer);
 			}else if(inf->sub){
-				newPer=convertOctalToDecimal(oldPer) & inf->number;
-				newPer=convertDecimalToOctal(newPer);
+				newPer=oldPer & inf->number;
+				newPer=newPer;
 				chmod(path_string,newPer);
 			}
 			*old=oldPer;
@@ -288,10 +261,10 @@ int search_dir(char *path, int showAll, struct info* inf)
 		{	
 			if(changePermission(path_stat,inf,path, &old, &new)){
 				if(showAll)
-					printInformation(old,new, path);
+					printInformation(old,new, path,1);
 			}	
 			else {
-				printInformation(old,new, path);
+				printInformation(old,new, path,0);
 				nfmod++;
 			}
 				
@@ -302,9 +275,9 @@ int search_dir(char *path, int showAll, struct info* inf)
 		else if (S_ISDIR(path_stat.st_mode))
 		{
 			if(!changePermission(path_stat,inf,path,&old,&new) && !showAll)
-				printInformation(old,new, path);
+				printInformation(old,new, path,0);
 			else if( showAll)
-				printInformation(old,new, path);
+				printInformation(old,new, path,1);
 				
 			
 		}
