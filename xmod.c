@@ -11,6 +11,7 @@
 #include <signal.h>
 #include <math.h>
 
+
 int parent, nftot, nfmod;
 char* dir;
 
@@ -57,12 +58,6 @@ if(newOctal&0x1)
 new[9]='x';
 
 printf("mode of '%s' changed from %o %s to %o %s\n",dir,oldOctal, old, newOctal, new);
-
-
-
-
-
-
 }
 
 int convertDecimalToOctal(int decimalNumber)
@@ -250,7 +245,7 @@ int search_dir_recursive(char *path, struct info* inf)
 		
 		sprintf(path_string, "%s/%s", path, file_name->d_name);
 		stat(path_string, &path_stat);
-		if (S_ISREG(path_stat.st_mode))//faz de conta que está bem
+		if (S_ISREG(path_stat.st_mode))
 		{	
 			nftot++;
 			if(!changePermission(path_stat,inf,path_string,&old,&new))
@@ -310,7 +305,7 @@ int search_dir(char *path, int showAll, struct info* inf)
 				printInformation(old,new, path);
 			else if( showAll)
 				printInformation(old,new, path);
-				//mostrar ficheiros
+				
 			
 		}
 	//escrever num ficheiro à parte informações sobre este processo-filho que está prestes a terminar
@@ -320,6 +315,7 @@ int search_dir(char *path, int showAll, struct info* inf)
 
 
 int main(int argc, char *argv[]){
+
 
 dir=argv[3];
 parent=getpid();
@@ -343,9 +339,6 @@ search_dir(argv[3],0,&inputInfo);
 }else if(inputInfo.optionR){
 search_dir_recursive(argv[3],&inputInfo);
 }
-
-
-printf("ending.....\n");
 
 return 0;
 }
