@@ -14,6 +14,8 @@
 
 int parent, nftot, nfmod;
 char* dir;
+char* arg1;
+char* arg2;
 
 void printInformation(int oldOctal, int newOctal, char* dir)
 {
@@ -89,9 +91,7 @@ long long convertOctalToDecimal(int octalNumber)
 
     return decimalNumber;
 }
-
-int globalPID;
-
+ 
 struct info
 {
 int octal;
@@ -112,7 +112,7 @@ inf->optionV=0;
 inf->optionC=0;
 inf->optionR=0;
 inf->add=0;
-inf->sub=0;
+inf->sub=0; 
 inf->replace=0;
 inf->number=0;
 
@@ -259,8 +259,8 @@ int search_dir_recursive(char *path, struct info* inf)
 			nftot=0;
 			int id = fork();
 			if (id == 0)
-			{      
-				search_dir_recursive(path_string, inf);
+			{      char* ar[]={"./xmod.c",arg1,arg2,path_string};
+				execvp(ar[0],ar);
 				return 0;
 			}
 			else
@@ -316,7 +316,8 @@ int search_dir(char *path, int showAll, struct info* inf)
 
 int main(int argc, char *argv[]){
 
-
+arg1=argv[1];
+arg2=argv[2];
 dir=argv[3];
 parent=getpid();
 struct info inputInfo;
@@ -339,6 +340,5 @@ search_dir(argv[3],0,&inputInfo);
 }else if(inputInfo.optionR){
 search_dir_recursive(argv[3],&inputInfo);
 }
-
 return 0;
 }
