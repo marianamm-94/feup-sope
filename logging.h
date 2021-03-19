@@ -7,6 +7,7 @@ int close();
 
 int logging(char* action, char* info);
 int loggingFile(char* action, char* path, int o, int n);
+int loggingSignal(char* action, char* signal, int pid);
 
 
 #endif

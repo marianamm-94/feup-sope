@@ -5,6 +5,7 @@
 #include <sys/stat.h>
 #include <string.h>
 #include <sys/types.h>
+#include <sys/time.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -270,15 +271,23 @@ int main(int argc, char *argv[],char *envp[]) {
     strcat(argInfo, " ");
     strcat(argInfo, argv[3]);
     if (getpgid(0) == getpid())
-    	{
-    	    clock_t begin = clock();
-    	    char * beg = malloc(50);
-    	    sprintf(beg,"%ld",begin);
-    	    setenv("INITIAL",beg,1);
-    	    openfile("w");
+    	{   
+    	    char* beg = malloc(50), *beg1=malloc(50);
+    	    struct timeval start;
+    	    gettimeofday(&start,NULL);
+    	    long secStart = start.tv_sec;
+    	    long microStart = start.tv_usec;
+    	    sprintf(beg,"%ld",secStart);
+    	    sprintf(beg1,"%ld",microStart);
+    	    setenv("INITIAL1",beg,1);
+    	    setenv("INITIAL2",beg1,1);
+    	    if(!openfile("w"))
+    	    {
     	    fprintf(file, "0 ; %d ; PROC_CREAT ; %s %s %s %s \n" ,getpid(),argv[0],argv[1],argv[2],argv[3]);
             closefile();
-    	    free(beg);
+            free(beg);
+            free(beg1);
+    	    }
     	}
     else
         logging("PROC_CREAT",argInfo);

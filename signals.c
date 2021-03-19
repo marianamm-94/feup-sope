@@ -54,6 +54,7 @@ void childend(int signo){
 
 void parentterminate(){
     usleep(10);
+    loggingSignal("SIGNAL_SENT", "SIGUSR1", getpgid(0));    
     killpg(getpgid(0), SIGUSR1);
     exit(1);
 };
@@ -72,8 +73,12 @@ int checkcurrentstat(){
         do {
             printf("End the program ?(y/n) \n");
             c = getchar();
-            if(c == 'y'|| c=='Y') parentterminate();
-            if(c == 'n'|| c=='N') killpg(getpgid(0), SIGCONT);
+            if(c == 'y'|| c=='Y') 
+            	parentterminate();
+            if(c == 'n'|| c=='N') {
+                loggingSignal("SIGNAL_SENT", "SIGCONT", getpgid(0));
+            	killpg(getpgid(0), SIGCONT);
+            	}
         }while (c != 'y' && c != 'n'&& c != 'Y' && c != 'N');
 
     }
