@@ -14,30 +14,34 @@ extern char* dir;
 
 
 int setParent(){
-    if(signal(SIGINT, parentinthandler))
-    	logging("SIGNAL_RECV","SIGINT");
-    if(signal(SIGUSR1, SIG_IGN))
-    	logging("SIGNAL_RECV","SIGUSR1");
+    signal(SIGINT, parentinthandler);
+    	//logging("SIGNAL_RECV","SIGINT");
+    signal(SIGUSR1, SIG_IGN);
+    	//logging("SIGNAL_RECV","SIGUSR1");
     return 0;
 };
 
 int setChild(){
-    if(signal(SIGINT, childinthandler))
-    	logging("SIGNAL_RECV","SIGINT");
-    if(signal(SIGCONT, childcontinue))
-    	logging("SIGNAL_RECV","SIGCONT");
-    if(signal(SIGUSR1, childend))
-    	logging("SIGNAL_RECV","SIGUSR1");
+    signal(SIGINT, childinthandler);
+    	//logging("SIGNAL_RECV","SIGINT");
+    signal(SIGCONT, childcontinue);
+    	//logging("SIGNAL_RECV","SIGCONT");
+    signal(SIGUSR1, childend);
+    	//logging("SIGNAL_RECV","SIGUSR1");
     return 0;
 };
 
 void childinthandler(int signo){
-    hold = 1;
+    hold = 1;sleep(1);
+    logging("SIGNAL_RECV","SIGINT");
     printf("%d ; %s ; %d ; %d\n", getpid(), dir, nftot, nfmod);
+    fflush(stdout);
 };
 
 void parentinthandler(int signo){
+    logging("SIGNAL_RECV","SIGINT");
     printf("%d ; %s ; %d ; %d\n", getpid(), dir, nftot, nfmod);
+    fflush(stdout);
     if(ask) return;
     ask = 1;
 };
@@ -45,23 +49,28 @@ void parentinthandler(int signo){
 void childcontinue(int signo){
     hold = 0;
     end = 0;
+    logging("SIGNAL_RECV","SIGCONT");
 };
 
 void childend(int signo){
     hold = 1;
     end = 1;
+    logging("SIGNAL_RECV","SIGUSR1");
 };
 
 void parentterminate(){
     usleep(10);
     loggingSignal("SIGNAL_SENT", "SIGUSR1", getpgid(0));    
-    killpg(getpgid(0), SIGUSR1);
+    killpg(getpgid(0), SIGUSR1);  
+    while (wait(NULL) >= 0); 
+    logging("PROC_EXIT", "1"); 
     exit(1);
 };
 
 void childterminate(){
     while (wait(NULL) >= 0);
-    return;
+    logging("PROC_EXIT", "1");
+    exit(1);
     
 };
 
