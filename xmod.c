@@ -105,7 +105,7 @@ void processInput(struct info *inf, char *option, char *mode, char *name) {
     else 
     {
        logging("PROC_EXIT", "1");
-       fprintf(stderr,"Error: xmod doesn't support that option!\n");
+       fprintf(stderr,"xmod: invalid mode: ‘%s’\n",option);
        exit(1);
     }
 
@@ -147,7 +147,7 @@ void processInput(struct info *inf, char *option, char *mode, char *name) {
     }
     else{
      logging("PROC_EXIT", "1");
-        fprintf(stderr,"Error: xmod doesn't support that mode!\n");
+        fprintf(stderr,"xmod: invalid mode: ‘%s’\n",mode);
     	exit(1);
     }
 
