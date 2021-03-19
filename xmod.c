@@ -98,15 +98,21 @@ void processInput(struct info *inf, char *option, char *mode, char *name) {
 
     if (strcmp(option, "-V") == 0 || strcmp(option, "-v") == 0)
         inf->optionV = 1;
-    if (strcmp(option, "-C") == 0 || strcmp(option, "-c") == 0)
+    else if (strcmp(option, "-C") == 0 || strcmp(option, "-c") == 0)
         inf->optionC = 1;
-    if (strcmp(option, "-R") == 0 || strcmp(option, "-r") == 0)
+    else if (strcmp(option, "-R") == 0 || strcmp(option, "-r") == 0)
         inf->optionR = 1;
+    else 
+    {
+       logging("PROC_EXIT", "1");
+       fprintf(stderr,"Error: xmod doesn't support that option!\n");
+       exit(1);
+    }
 
-    if (mode[0] != 'u' && mode[0] != 'g' && mode[0] != 'o' && mode[0] != 'a') {
+    if (mode[0] == '0') {
         inf->octal = strtol(mode, 0, 8);
         inf->replace = 1;
-    } else {
+    } else if (mode[0]=='a' || mode[0]=='g' || mode[0]=='u' ||mode[0]=='o') {
         int i = 0;
         int r = 0;
         int w = 0;
@@ -138,6 +144,11 @@ void processInput(struct info *inf, char *option, char *mode, char *name) {
             inf->number = 511 - inf->octal;
         }
 
+    }
+    else{
+     logging("PROC_EXIT", "1");
+        fprintf(stderr,"Error: xmod doesn't support that mode!\n");
+    	exit(1);
     }
 
 }
@@ -186,6 +197,12 @@ int search_dir_recursive(char *path, struct info *inf) {
     else
     	setChild();
     DIR *directory = opendir(path);
+    if (directory == NULL)
+    {
+        logging("PROC_EXIT", "1");
+    	exit(1);
+    }
+    	
     struct dirent *file_name;
 
     while ((file_name = readdir(directory)) != NULL) {
@@ -232,7 +249,12 @@ int search_dir_recursive(char *path, struct info *inf) {
 int search_dir(char *path, int showAll, struct info *inf) {
     int old, new;
     struct stat path_stat;
-    stat(path, &path_stat);
+    if(stat(path, &path_stat)==-1){
+        logging("PROC_EXIT", "1");
+        fprintf(stderr,"xmod: cannot access '%s': No such file or directory\n",path);
+        fprintf(stderr,"failed to change mode of '%s' from 0000 (---------) to 0000 (---------)\n",path);
+    	exit(1);
+    }
     if (S_ISREG(path_stat.st_mode)) {
         if (changePermission(path_stat, inf, path, &old, &new)) {
             if (showAll)
