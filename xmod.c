@@ -13,6 +13,12 @@
 #include "signals.h"
 
 extern volatile sig_atomic_t hold;
+extern FILE *file;
+
+
+int openfile(char* p);
+int closefile();
+clock_t clock();
 
 int nftot, nfmod;
 char *arg0;
@@ -176,6 +182,8 @@ int search_dir_recursive(char *path, struct info *inf) {
     int old, new;
     if (getpgid(0) == getpid()) 
         setParent();
+    else
+    	setChild();
     DIR *directory = opendir(path);
     struct dirent *file_name;
 
@@ -192,30 +200,25 @@ int search_dir_recursive(char *path, struct info *inf) {
         stat(path_string, &path_stat);
         if (S_ISREG(path_stat.st_mode)) {
             nftot++;
-            if (!changePermission(path_stat, inf, path_string, &old, &new))
+            if (!changePermission(path_stat, inf, path_string, &old, &new)){
                 nfmod++;
+                loggingFile("FILE_MODF", path_string, old, new);
+                }
         } else if (S_ISDIR(path_stat.st_mode) && strcmp(file_name->d_name, "..") && strcmp(file_name->d_name, ".")) {
-            changePermission(path_stat, inf, path_string, &old, &new);
-
-            nfmod = 0;
-            nftot = 0;
+            if(!changePermission(path_stat, inf, path_string, &old, &new))
+		loggingFile("FILE_MODF", path_string, old, new);
             int id = fork();
             if (id == 0) {
-                if (getpgid(0)!=getpid()) 
-                     setChild();
                 char *ar[] = {arg0, arg1, arg2, path_string,NULL};
                 execvp(ar[0], ar);
                 return 0;
             } else {
               
-
-
             }
         }
         free(path_string);
     }
 
-    //escrever num ficheiro à parte informações sobre este processo-filho que está prestes a terminar
     closedir(directory);
     while (waitpid(-1,NULL,WNOHANG)>=0)
     {
@@ -234,6 +237,7 @@ int search_dir(char *path, int showAll, struct info *inf) {
             if (showAll)
                 printInformation(old, new, path, 1);
         } else {
+            loggingFile("FILE_MODF", path, old, new);
             printInformation(old, new, path, 0);
             nfmod++;
         }
@@ -242,20 +246,44 @@ int search_dir(char *path, int showAll, struct info *inf) {
         nftot++;
 
     } else if (S_ISDIR(path_stat.st_mode)) {
-        if (!changePermission(path_stat, inf, path, &old, &new) && !showAll)
+        if (!changePermission(path_stat, inf, path, &old, &new)){   loggingFile("FILE_MODF", path, old, new);	
             printInformation(old, new, path, 0);
+            }
         else if (showAll)
             printInformation(old, new, path, 1);
 
 
     }
-    //escrever num ficheiro à parte informações sobre este processo-filho que está prestes a terminar
+    
 
     return 0;
 }
 
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[],char *envp[]) {
+    char * argInfo = malloc(strlen(argv[0])+strlen(argv[1])+strlen(argv[2])+strlen(argv[3])+strlen("       ")+1);
+    strcpy(argInfo, argv[0]);
+    strcat(argInfo, " ");
+    strcat(argInfo, argv[1]);
+    strcat(argInfo, " ");
+    strcat(argInfo, argv[2]);
+    strcat(argInfo, " ");
+    strcat(argInfo, argv[3]);
+    if (getpgid(0) == getpid())
+    	{
+    	    clock_t begin = clock();
+    	    char * beg = malloc(50);
+    	    sprintf(beg,"%ld",begin);
+    	    setenv("INITIAL",beg,1);
+    	    openfile("w");
+    	    fprintf(file, "0 ; %d ; PROC_CREAT ; %s %s %s %s \n" ,getpid(),argv[0],argv[1],argv[2],argv[3]);
+            closefile();
+    	    free(beg);
+    	}
+    else
+        logging("PROC_CREAT",argInfo);
+    nfmod = 0;
+    nftot = 0;
     arg0 = argv[0];
     arg1 = argv[1];
     arg2 = argv[2];
@@ -269,5 +297,6 @@ int main(int argc, char *argv[]) {
     } else if (inputInfo.optionR) {
         search_dir_recursive(argv[3], &inputInfo);
     }
+    logging("PROC_EXIT", "0");
     return 0;
 }

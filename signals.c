@@ -4,6 +4,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include "signals.h"
+#include "logging.h"
 
 volatile sig_atomic_t hold = 0, end = 0, ask = 0;
 
@@ -13,27 +14,30 @@ extern char* dir;
 
 
 int setParent(){
-    signal(SIGINT, parentinthandler);
-    signal(SIGUSR1, SIG_IGN);
+    if(signal(SIGINT, parentinthandler))
+    	logging("SIGNAL_RECV","SIGINT");
+    if(signal(SIGUSR1, SIG_IGN))
+    	logging("SIGNAL_RECV","SIGUSR1");
     return 0;
 };
 
 int setChild(){
-    signal(SIGINT, childinthandler);
-    signal(SIGCONT, childcontinue);
-    signal(SIGUSR1, childend);
+    if(signal(SIGINT, childinthandler))
+    	logging("SIGNAL_RECV","SIGINT");
+    if(signal(SIGCONT, childcontinue))
+    	logging("SIGNAL_RECV","SIGCONT");
+    if(signal(SIGUSR1, childend))
+    	logging("SIGNAL_RECV","SIGUSR1");
     return 0;
 };
 
 void childinthandler(int signo){
     hold = 1;
-    printf("child\n");
     printf("%d ; %s ; %d ; %d\n", getpid(), dir, nftot, nfmod);
 };
 
 void parentinthandler(int signo){
-     printf("parent\n");
-     printf("%d ; %s ; %d ; %d\n", getpid(), dir, nftot, nfmod);
+    printf("%d ; %s ; %d ; %d\n", getpid(), dir, nftot, nfmod);
     if(ask) return;
     ask = 1;
 };
@@ -68,7 +72,6 @@ int checkcurrentstat(){
         do {
             printf("End the program ?(y/n) \n");
             c = getchar();
-            getchar();
             if(c == 'y'|| c=='Y') parentterminate();
             if(c == 'n'|| c=='N') killpg(getpgid(0), SIGCONT);
         }while (c != 'y' && c != 'n'&& c != 'Y' && c != 'N');
