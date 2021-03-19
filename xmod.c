@@ -9,13 +9,16 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <signal.h>
-#include <math.h>
+#include "logging.h"
+#include "signals.h"
 
+extern volatile sig_atomic_t hold;
 
-int parent, nftot, nfmod;
-char *dir;
+int nftot, nfmod;
+char *arg0;
 char *arg1;
 char *arg2;
+char *dir;
 
 void printInformation(int oldOctal, int newOctal, char *dir, int retained) {
     char old[12] = "(---------)";
@@ -132,32 +135,6 @@ void processInput(struct info *inf, char *option, char *mode, char *name) {
 
 }
 
-
-void func(int ai) {
-    char c;
-
-    printf("%d ; %s ; %d ; %d\n", getpid(), dir, nftot, nfmod);
-
-    if (getpid() == parent) {
-        printf("\n > Are you sure you want to terminate (Y/N)? ");
-        c = getchar();
-
-        if (c == 'y' || c == 'Y')
-            exit(0);
-        else if (c == 'n' || c == 'N')
-            return;
-        else {
-            printf(" >> ERROR: Character not allowed!");
-            func(SIGINT);
-        }
-
-        exit(0);
-    }
-
-
-}
-
-
 int process_permission(struct stat st) {
     int perm = 0;
 
@@ -197,15 +174,20 @@ int changePermission(struct stat path_stat, struct info *inf, char *path_string,
 
 int search_dir_recursive(char *path, struct info *inf) {
     int old, new;
-    dir = path;
-
+    if (getpgid(0) == getpid()) 
+        setParent();
     DIR *directory = opendir(path);
     struct dirent *file_name;
 
     while ((file_name = readdir(directory)) != NULL) {
+        if (checkcurrentstat())
+            fprintf(stderr,"ERROR");
+        if (hold)
+            pause();
         struct stat path_stat;
         char *path_string = malloc(sizeof(path) + sizeof('/') + sizeof(file_name->d_name));
-
+	if (checkcurrentstat())
+            fprintf(stderr,"ERROR");
         sprintf(path_string, "%s/%s", path, file_name->d_name);
         stat(path_string, &path_stat);
         if (S_ISREG(path_stat.st_mode)) {
@@ -219,11 +201,13 @@ int search_dir_recursive(char *path, struct info *inf) {
             nftot = 0;
             int id = fork();
             if (id == 0) {
-                char *ar[] = {"./xmod.c", arg1, arg2, path_string};
+                if (getpgid(0)!=getpid()) 
+                     setChild();
+                char *ar[] = {arg0, arg1, arg2, path_string,NULL};
                 execvp(ar[0], ar);
                 return 0;
             } else {
-                wait(NULL);
+              
 
 
             }
@@ -232,7 +216,11 @@ int search_dir_recursive(char *path, struct info *inf) {
     }
 
     //escrever num ficheiro à parte informações sobre este processo-filho que está prestes a terminar
-
+    closedir(directory);
+    while (waitpid(-1,NULL,WNOHANG)>=0)
+    {
+        checkcurrentstat();
+    }
     return 0;
 }
 
@@ -268,24 +256,12 @@ int search_dir(char *path, int showAll, struct info *inf) {
 
 
 int main(int argc, char *argv[]) {
-
+    arg0 = argv[0];
     arg1 = argv[1];
     arg2 = argv[2];
     dir = argv[3];
-    parent = getpid();
     struct info inputInfo;
     processInput(&inputInfo, argv[1], argv[2], argv[3]);
-
-    struct sigaction new, old;
-    sigset_t smask;
-    if (sigemptyset(&smask) == -1)
-        perror("sigsetfunctions");
-    new.sa_handler = func;
-    new.sa_mask = smask;
-    new.sa_flags = 0;
-    if (sigaction(SIGINT, &new, &old) == -1)
-        perror("sigaction");
-
     if (inputInfo.optionV) {
         search_dir(argv[3], 1, &inputInfo);
     } else if (inputInfo.optionC) {
