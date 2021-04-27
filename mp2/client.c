@@ -7,11 +7,18 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-int nsec, serverClosed = 0;
+int nsec, serverClosed = 0, fd, clientClosed = 0;
 char fifoname[256];
 time_t start;
 
 pthread_mutex_t mut = PTHREAD_MUTEX_INITIALIZER;
+
+
+void logging(Message* message, char * oper)
+{
+	printf("%ld ; %d ; %d ; %d ; %ld ; %d ; %s", time(NULL), message->rid, message->tskload, message->pid, message->tid, message->tskres, oper);
+}
+
 
 void *funcThread(void * id)
 {
@@ -30,50 +37,78 @@ void *funcThread(void * id)
 	if (mkfifo(privateFifo, 0660) < 0)
 	{
 		perror("Error while creating private FIFO!");
-		exit(-1);
+		return NULL;
 	}
-	
-	//open public fifo
-	int fd = open(fifoname, O_WRONLY);
-	if (fd == -1 )
-	{
-		//log FAILD?
-		unlink(privateFifo);
-		pthread_mutex_lock(&mut);
-		serverClosed = 1;
-		pthread_mutex_unlock(&mut);
-		exit(-1);
-	}
+
 	
 	//send request
 	if (write(fd, message, sizeof(Message)) < 0)
 	{
-		//log FAILD?
-		unlink(privateFifo);
-		pthread_mutex_lock(&mut);
-		serverClosed = 1;
-		pthread_mutex_unlock(&mut);
-		exit(-1);
+			unlink(privateFifo);
+			pthread_mutex_lock(&mut);
+			serverClosed = 1;
+			pthread_mutex_unlock(&mut);
+			free(message);
+			return NULL;
 	}
-	close(fd);
-	//log IWANT
+	pthread_mutex_lock(&mut);
+	logging(message, "IWANT");
+	pthread_mutex_unlock(&mut);
+	
 	
 	//open privateFIFO for reading
 	int fdPrivate = open(privateFifo, O_RDONLY);
 	if (fdPrivate == -1)
 	{
-		//??
+		if(clientClosed)
+		{
+			unlink(privateFifo);
+			pthread_mutex_lock(&mut);
+			logging(message, "GAVUP");
+			pthread_mutex_unlock(&mut);
+			close(fdPrivate);
+			free(message);
+			return NULL;
+		}
 	}
-	
+
 	//reads message
-	if (read(fdPrivate, message, sizeof(Message)) < 0)
+	Message* receiveMessage = malloc(sizeof(Message));
+
+	
+	if (read(fdPrivate, receiveMessage, sizeof(Message)) < 0)
 	{
-		//??
+		if(clientClosed)
+		{
+			unlink(privateFifo);
+			pthread_mutex_lock(&mut);
+			logging(message, "GAVUP");
+			pthread_mutex_unlock(&mut);
+			close(fdPrivate);
+			free(message);
+			free(receiveMessage);
+			return NULL;
+		}
 	}
-	//CLOSD or GOTRS dependendo da mensagem recebida
+	if (receiveMessage->tskres == -1)
+		{
+
+			pthread_mutex_lock(&mut);
+			logging(receiveMessage, "CLOSD");
+			serverClosed = 1;
+			pthread_mutex_unlock(&mut);
+		}
+	else	
+		{	
+			pthread_mutex_lock(&mut);
+			logging(receiveMessage, "GOTRS");
+			pthread_mutex_unlock(&mut);
+		}
+	unlink(privateFifo);
 	close(fdPrivate);
+	free(receiveMessage);
 	free(message);
-	exit(0);
+	return NULL;
 }
 
 
@@ -91,6 +126,7 @@ int processInput(int argc, char *argv[])
 	
 	return 0;
 }
+
 int main(int argc, char *argv[])
 {
 
@@ -99,17 +135,22 @@ int main(int argc, char *argv[])
 		perror("Invalid arguments!");
 		exit(-1);
 	}
-
+	fd = open(fifoname, O_WRONLY);
+	if (fd == -1 )
+		exit(-1);
 	start = time(NULL);
 	int id = 1;
-	while ((time(NULL)-start)<nsec)
+	while ((time(NULL)-start)<nsec && !serverClosed)
 	{
 		pthread_t thread;
-		pthread_create(thread, NULL, funcThread, &id);
+		pthread_create(&thread, NULL, funcThread, &id);
 		pthread_detach(thread);
 		usleep(10*1000); //creates every 50 ms
 		id++;
 	}
+	while((time(NULL)-start)<nsec);
+	close(fd);
+	clientClosed = 1;
 	pthread_exit(0);
 
 }
