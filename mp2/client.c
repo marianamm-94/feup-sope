@@ -6,6 +6,7 @@
 #include <pthread.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <unistd.h>
 
 int nsec, serverClosed = 0, fd, clientClosed = 0;
 char fifoname[256];
@@ -16,7 +17,7 @@ pthread_mutex_t mut = PTHREAD_MUTEX_INITIALIZER;
 
 void logging(Message* message, char * oper)
 {
-	printf("%ld ; %d ; %d ; %d ; %ld ; %d ; %s", time(NULL), message->rid, message->tskload, message->pid, message->tid, message->tskres, oper);
+	printf("%ld ; %d ; %d ; %d ; %ld ; %d ; %s \n", time(NULL), message->rid, message->tskload, message->pid, message->tid, message->tskres, oper);
 }
 
 
@@ -139,18 +140,26 @@ int main(int argc, char *argv[])
 	if (fd == -1 )
 		exit(-1);
 	start = time(NULL);
-	int id = 1;
+	int id = 0;
+	pthread_t *threads= malloc(sizeof(pthread_t)*10000);
 	while ((time(NULL)-start)<nsec && !serverClosed)
 	{
+		int *temp_id =  malloc(sizeof(int));
+		*temp_id = id;
 		pthread_t thread;
-		pthread_create(&thread, NULL, funcThread, &id);
-		pthread_detach(thread);
+		pthread_create(&thread, NULL, funcThread, temp_id);
+		//pthread_detach(thread);
 		usleep(10*1000); //creates every 50 ms
+		threads[id]=thread;
 		id++;
 	}
 	while((time(NULL)-start)<nsec);
 	close(fd);
 	clientClosed = 1;
-	pthread_exit(0);
+	for (size_t i = 0; i < id; i++)
+	{
+		pthread_join(threads[i],NULL);
+	}
+	return 0;
 
 }
