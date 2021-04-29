@@ -1,13 +1,15 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include "common.h"
 #include <time.h>
 #include <pthread.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include "common.h"
 
+ 
 int nsec, serverClosed = 0, fd, clientClosed = 0;
 char fifoname[256];
 time_t start;
@@ -17,7 +19,7 @@ pthread_mutex_t mut = PTHREAD_MUTEX_INITIALIZER;
 
 void logging(Message* message, char * oper)
 {
-	printf("%ld ; %d ; %d ; %d ; %ld ; %d ; %s \n", time(NULL), message->rid, message->tskload, message->pid, message->tid, message->tskres, oper);
+	printf("%ld ; %d ; %d ; %d ; %ld ; %d ; %s\n", time(NULL), message->rid, message->tskload, message->pid, message->tid, message->tskres, oper);
 }
 
 
@@ -29,7 +31,7 @@ void *funcThread(void * id)
 	message->rid = requestID;
 	message->pid = getpid();
 	message->tid = pthread_self();
-	message->tskload = rand() % 9 + 1;
+	message->tskload = (rand() % 9) + 1;
 	message->tskres = -1;
 
 	//create private fifo
@@ -46,15 +48,12 @@ void *funcThread(void * id)
 	if (write(fd, message, sizeof(Message)) < 0)
 	{
 			unlink(privateFifo);
-			pthread_mutex_lock(&mut);
-			serverClosed = 1;
-			pthread_mutex_unlock(&mut);
 			free(message);
 			return NULL;
 	}
-	pthread_mutex_lock(&mut);
+	//pthread_mutex_lock(&mut);
 	logging(message, "IWANT");
-	pthread_mutex_unlock(&mut);
+	//pthread_mutex_unlock(&mut);
 	
 	
 	//open privateFIFO for reading
@@ -64,9 +63,9 @@ void *funcThread(void * id)
 		if(clientClosed)
 		{
 			unlink(privateFifo);
-			pthread_mutex_lock(&mut);
+			//pthread_mutex_lock(&mut);
 			logging(message, "GAVUP");
-			pthread_mutex_unlock(&mut);
+			//pthread_mutex_unlock(&mut);
 			close(fdPrivate);
 			free(message);
 			return NULL;
@@ -82,9 +81,9 @@ void *funcThread(void * id)
 		if(clientClosed)
 		{
 			unlink(privateFifo);
-			pthread_mutex_lock(&mut);
+			//pthread_mutex_lock(&mut);
 			logging(message, "GAVUP");
-			pthread_mutex_unlock(&mut);
+			//pthread_mutex_unlock(&mut);
 			close(fdPrivate);
 			free(message);
 			free(receiveMessage);
@@ -95,14 +94,16 @@ void *funcThread(void * id)
 		{
 
 			pthread_mutex_lock(&mut);
-			logging(receiveMessage, "CLOSD");
+			message->tskres = receiveMessage->tskres;
+			logging(message, "CLOSD");
 			serverClosed = 1;
 			pthread_mutex_unlock(&mut);
 		}
 	else	
 		{	
 			pthread_mutex_lock(&mut);
-			logging(receiveMessage, "GOTRS");
+			message->tskres = receiveMessage->tskres;
+			logging(message, "GOTRS");
 			pthread_mutex_unlock(&mut);
 		}
 	unlink(privateFifo);
@@ -136,10 +137,13 @@ int main(int argc, char *argv[])
 		perror("Invalid arguments!");
 		exit(-1);
 	}
-	fd = open(fifoname, O_WRONLY);
-	if (fd == -1 )
-		exit(-1);
 	start = time(NULL);
+	while((time(NULL)-start)<nsec)
+		{
+			fd = open(fifoname, O_WRONLY);
+			if (fd != -1 )
+				break;
+		}
 	int id = 0;
 	pthread_t *threads= malloc(sizeof(pthread_t)*10000);
 	while ((time(NULL)-start)<nsec && !serverClosed)
@@ -161,5 +165,6 @@ int main(int argc, char *argv[])
 		pthread_join(threads[i],NULL);
 	}
 	return 0;
+
 
 }
