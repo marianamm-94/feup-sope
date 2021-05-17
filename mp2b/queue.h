@@ -1,9 +1,9 @@
 #ifndef QUEUE_H
 #define QUEUE_H
-#include "common.h"
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "common.h"
 
 struct Queue {
 	int front, rear, size;

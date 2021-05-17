@@ -8,7 +8,7 @@ struct Queue* createQueue(unsigned capacity)
 	queue->capacity = capacity;
 	queue->front = queue->size = 0;
 	queue->rear = capacity - 1;
-	queue->array = (int*)malloc(
+	queue->array = (Message*)malloc(
 		queue->capacity * sizeof(Message));
 	return queue;
 }
