@@ -7,13 +7,20 @@
 #include "common.h"
 #include "queue.h"
 #include <semaphore.h>
+#include <signal.h>
+#include <unistd.h>
 
 char fifoname[256];
 time_t start;
 int nsec, bufsz=5,fd;
+int serverClosed = 0;
 sem_t * semaphore;
 struct Queue* queue;
 
+void alrm(int signo)
+{
+	serverClosed = 1;
+}
 
 void logging(Message *message, char *oper) {
     printf("%ld ; %d ; %d ; %d ; %ld ; %d ; %s\n", time(NULL), message->rid, message->tskload, getpid(),
@@ -24,15 +31,22 @@ void *funcProdutor(void *request) {
 	Message* message = malloc(sizeof(Message));
 	message = (Message*) request;
 	int res = task(message->tskload);
+	if(serverClosed)
+		{
+		message->tskres = -1;
+		logging(message,"2LATE");
+		}
+	else{
 	message->tskres = res;
 	logging(message,"TSKEK");
+	}
 	sem_wait(semaphore);
 	enqueue(queue, *message);
 	free(message);
 }
 
 void *funcConsumidor(void *v){
-	while ((time(NULL) - start) < nsec){
+	while (!serverClosed){
 		if(isEmpty(queue)!=1)
 		{
 			Message* message = malloc(sizeof(Message));
@@ -42,7 +56,8 @@ void *funcConsumidor(void *v){
     			sprintf(privateFifo, "/tmp/%d.%ld", message->pid, message->tid);
 			int fdPrivate = open(privateFifo, O_WRONLY);
 			if(fdPrivate == -1)
-			{
+			{	
+
 				logging(message,"FAILD");
 				free(message);
 				break;
@@ -50,7 +65,8 @@ void *funcConsumidor(void *v){
 			message->pid = getpid();
     			message->tid = pthread_self();
 			if(write(fdPrivate, message, sizeof(Message))<0)
-				{logging(message,"FAILD");
+				{
+				logging(message,"FAILD");
 				free(message);
 				break;
 				}
@@ -94,10 +110,20 @@ int main(int argc, char *argv[]) {
     semaphore = (sem_t*)malloc(sizeof(sem_t));
     sem_init(semaphore,1,bufsz);
     queue = createQueue(bufsz);
-    start = time(NULL);
+    struct sigaction new,old;
+    sigset_t smask;
+    sigemptyset(&smask);
+    new.sa_handler = alrm;
+    new.sa_mask = smask;
+    new.sa_flags= 0;
+    if(sigaction(SIGALRM, &new, &old)==-1){
+    	perror("sigaction SIGALRM error");
+    	exit(2);
+    }
+    alarm(nsec);
     if (mkfifo(fifoname, 0660) < 0) {
         perror("Error while creating public FIFO!");
-        exit(2);
+        exit(3);
     }
     fd = open(fifoname,O_RDONLY);
     if(fd==-1){
@@ -108,7 +134,7 @@ int main(int argc, char *argv[]) {
     pthread_t consumidor;
     pthread_create(&consumidor, NULL, funcConsumidor, NULL);
     pthread_t *threads = malloc(sizeof(pthread_t) * 10000);
-    while ((time(NULL) - start) < nsec) {
+    while (!serverClosed) {
         Message* request = malloc(sizeof(Message));
         read(fd,request,sizeof(Message));
         logging(request,"RECVD");
@@ -117,12 +143,13 @@ int main(int argc, char *argv[]) {
         threads[id] = thread;
 	id++;
     }
+    pthread_join(consumidor, NULL);
     for (size_t i = 0; i < id; i++) {
         pthread_join(threads[i], NULL);
     }
-    pthread_join(consumidor, NULL);
     free(queue);
     free(semaphore);
+    close(fd);
     return 0;
 
 }
