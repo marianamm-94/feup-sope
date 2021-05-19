@@ -20,6 +20,8 @@ struct Queue* queue;
 void alrm(int signo)
 {
 	serverClosed = 1;
+	close(fd);
+	unlink(fifoname);
 }
 
 void logging(Message *message, char *oper) {
@@ -159,8 +161,6 @@ int main(int argc, char *argv[]) {
     pthread_join(consumidor, NULL);
     free(queue);
     free(semaphore);
-    close(fd);
-    unlink(fifoname);
     return 0;
 
 
