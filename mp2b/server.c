@@ -30,54 +30,61 @@ void logging(Message *message, char *oper) {
 void *funcProdutor(void *request) {
 	Message* message = malloc(sizeof(Message));
 	message = (Message*) request;
+	logging(message,"RECVD");
 	int res = task(message->tskload);
 	if(serverClosed)
 		{
 		message->tskres = -1;
-		logging(message,"2LATE");
 		}
 	else{
 	message->tskres = res;
-	logging(message,"TSKEK");
+	logging(message,"TSKEX");
 	}
 	sem_wait(semaphore);
 	enqueue(queue, *message);
-	free(message);
 }
 
+
 void *funcConsumidor(void *v){
-	while (!serverClosed){
+	while (1){
 		if(isEmpty(queue)!=1)
 		{
 			Message* message = malloc(sizeof(Message));
 			*message = dequeue(queue);
-			sem_post(semaphore);
 			char privateFifo[256];
     			sprintf(privateFifo, "/tmp/%d.%ld", message->pid, message->tid);
 			int fdPrivate = open(privateFifo, O_WRONLY);
-			if(fdPrivate == -1)
+			if(fdPrivate < 0)
 			{	
-
 				logging(message,"FAILD");
-				free(message);
-				break;
+				continue;
 				}
 			message->pid = getpid();
     			message->tid = pthread_self();
 			if(write(fdPrivate, message, sizeof(Message))<0)
 				{
 				logging(message,"FAILD");
-				free(message);
-				break;
+				continue;
 				}
-			logging(message,"TSKDN");
-			free(message);
+			if(message->tskres==-1)
+				logging(message,"2LATE");
+				
+			else
+				logging(message,"TSKDN");
+			sem_post(semaphore);
+			close(fdPrivate);
 		}
-	
-	
+		usleep(10000);
+		if(serverClosed && isEmpty(queue))
+		{
+			
+			break;
+			}
+			
 	
 	}
 }
+
 
 int processInput(int argc, char *argv[]) {
     if (argc != 4 && argc!=6)
@@ -130,26 +137,31 @@ int main(int argc, char *argv[]) {
         perror("Error while opening public FIFO!");
         exit(3);
     }
-    int id = 0;
     pthread_t consumidor;
     pthread_create(&consumidor, NULL, funcConsumidor, NULL);
     pthread_t *threads = malloc(sizeof(pthread_t) * 10000);
-    while (!serverClosed) {
+    int id=0;
+    while (1) {
         Message* request = malloc(sizeof(Message));
-        read(fd,request,sizeof(Message));
-        logging(request,"RECVD");
+        if(read(fd,request,sizeof(Message))<0)
+        {	
+        	break;
+        }
         pthread_t thread;
         pthread_create(&thread, NULL, funcProdutor, request);
         threads[id] = thread;
 	id++;
     }
-    pthread_join(consumidor, NULL);
+	
     for (size_t i = 0; i < id; i++) {
         pthread_join(threads[i], NULL);
     }
+    pthread_join(consumidor, NULL);
     free(queue);
     free(semaphore);
     close(fd);
+    unlink(fifoname);
     return 0;
+
 
 }
