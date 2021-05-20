@@ -16,11 +16,12 @@ int nsec, bufsz=5,fd;
 int serverClosed = 0;
 sem_t * semaphore;
 struct Queue* queue;
+pthread_mutex_t mut = PTHREAD_MUTEX_INITIALIZER;
+int numThreads = 0;
 
 void alrm(int signo)
 {
 	serverClosed = 1;
-	close(fd);
 	unlink(fifoname);
 }
 
@@ -30,9 +31,11 @@ void logging(Message *message, char *oper) {
 }
 
 void *funcProdutor(void *request) {
+	pthread_mutex_lock(&mut);
+	numThreads++;
+	pthread_mutex_unlock(&mut);
 	Message* message = malloc(sizeof(Message));
 	message = (Message*) request;
-	logging(message,"RECVD");
 	int res = task(message->tskload);
 	if(serverClosed)
 		{
@@ -44,10 +47,16 @@ void *funcProdutor(void *request) {
 	}
 	sem_wait(semaphore);
 	enqueue(queue, *message);
+	pthread_mutex_lock(&mut);
+	numThreads--;
+	pthread_mutex_unlock(&mut);
 }
 
 
 void *funcConsumidor(void *v){
+	pthread_mutex_lock(&mut);
+	numThreads++;
+	pthread_mutex_unlock(&mut);
 	while (1){
 		if(isEmpty(queue)!=1)
 		{
@@ -76,8 +85,7 @@ void *funcConsumidor(void *v){
 			sem_post(semaphore);
 			close(fdPrivate);
 		}
-		usleep(10000);
-		if(serverClosed && isEmpty(queue))
+		if(serverClosed && isEmpty(queue)&& numThreads<=1)
 		{
 			
 			break;
@@ -85,6 +93,9 @@ void *funcConsumidor(void *v){
 			
 	
 	}
+	pthread_mutex_lock(&mut);
+	numThreads--;
+	pthread_mutex_unlock(&mut);
 }
 
 
@@ -150,7 +161,9 @@ int main(int argc, char *argv[]) {
         	break;
         }
         pthread_t thread;
+        logging(request,"RECVD");
         pthread_create(&thread, NULL, funcProdutor, request);
+        usleep(500);
         threads[id] = thread;
 	id++;
     }
