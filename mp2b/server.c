@@ -157,16 +157,19 @@ int main(int argc, char *argv[]) {
         perror("Error while opening public FIFO!");
         exit(3);
     }
+    int id=0;
+    int n;
     pthread_t consumidor;
     pthread_create(&consumidor, NULL, funcConsumidor, NULL);
     pthread_t *threads = malloc(sizeof(pthread_t) * 10000);
-    int id=0;
     while (1) {
         Message* request = malloc(sizeof(Message));
-        if(read(fd,request,sizeof(Message))<sizeof(Message))
+        if((n=read(fd,request,sizeof(Message)))<sizeof(Message))
         {	
         		break;
         }
+	if(n==-1)
+		break;
         pthread_t thread;
         logging(request,"RECVD");
         pthread_create(&thread, NULL, funcProdutor, request);
