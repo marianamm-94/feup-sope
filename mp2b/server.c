@@ -177,7 +177,6 @@ int main(int argc, char *argv[]) {
         threads[id] = thread;
 	id++;
     }
-	printf("\nsai do read\n");
     while(numThreads>0);
     free(queue);
     free(semaphore);
