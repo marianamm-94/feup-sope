@@ -6,9 +6,11 @@
 #include <fcntl.h>
 #include "common.h"
 #include "queue.h"
+#include "lib.h"
 #include <semaphore.h>
 #include <signal.h>
 #include <unistd.h>
+#include <errno.h>
 
 char fifoname[256];
 time_t start;
@@ -23,6 +25,7 @@ void alrm(int signo)
 {
 	serverClosed = 1;
 	unlink(fifoname);
+	
 }
 
 void logging(Message *message, char *oper) {
@@ -50,6 +53,7 @@ void *funcProdutor(void *request) {
 	pthread_mutex_lock(&mut);
 	numThreads--;
 	pthread_mutex_unlock(&mut);
+	pthread_exit(NULL);
 }
 
 
@@ -68,6 +72,7 @@ void *funcConsumidor(void *v){
 			if(fdPrivate < 0)
 			{	
 				logging(message,"FAILD");
+				sem_post(semaphore);
 				continue;
 				}
 			message->pid = getpid();
@@ -75,6 +80,7 @@ void *funcConsumidor(void *v){
 			if(write(fdPrivate, message, sizeof(Message))<0)
 				{
 				logging(message,"FAILD");
+				sem_post(semaphore);
 				continue;
 				}
 			if(message->tskres==-1)
@@ -96,6 +102,7 @@ void *funcConsumidor(void *v){
 	pthread_mutex_lock(&mut);
 	numThreads--;
 	pthread_mutex_unlock(&mut);
+	pthread_exit(NULL);
 }
 
 
@@ -156,9 +163,9 @@ int main(int argc, char *argv[]) {
     int id=0;
     while (1) {
         Message* request = malloc(sizeof(Message));
-        if(read(fd,request,sizeof(Message))<0)
+        if(read(fd,request,sizeof(Message))<sizeof(Message))
         {	
-        	break;
+        		break;
         }
         pthread_t thread;
         logging(request,"RECVD");
@@ -167,14 +174,12 @@ int main(int argc, char *argv[]) {
         threads[id] = thread;
 	id++;
     }
-	
-    for (size_t i = 0; i < id; i++) {
-        pthread_join(threads[i], NULL);
-    }
-    pthread_join(consumidor, NULL);
+	printf("\nsai do read\n");
+    while(numThreads>0);
     free(queue);
     free(semaphore);
     return 0;
 
 
 }
+
